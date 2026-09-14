@@ -1,0 +1,20 @@
+{
+ "permissions": {
+  "defaultMode": "acceptEdits",
+  "allow": [
+   "Bash(ls:*)",
+   "Bash(printf:*)",
+   "Bash(mktemp:*)",
+   "Bash(touch:*)",
+   "Bash(mkdir:*)",
+   "Bash(echo:*)",
+   "Bash(cat:*)",
+   "Bash(wc:*)",
+   "Bash(cd:*)"
+  ]
+ },
+ "sandbox": {
+  "enabled": false,
+  "autoAllowBashIfSandboxed": false
+ }
+}

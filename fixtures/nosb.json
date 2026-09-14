@@ -1,0 +1,13 @@
+{
+ "permissions": {
+  "defaultMode": "acceptEdits",
+  "allow": [
+   "Bash(ls:*)",
+   "Bash(printf:*)",
+   "Bash(mktemp:*)",
+   "Bash(touch:*)",
+   "Bash(mkdir:*)",
+   "Bash(echo:*)"
+  ]
+ }
+}
