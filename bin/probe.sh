@@ -22,6 +22,9 @@
 # The verdict is an OUTCOME, not parsed text: the command must create $MARK, and
 # the marker's existence decides it. $MARK lives inside the CLI's cwd (also passed
 # via --add-dir) so that a sandbox-confined write cannot masquerade as a block.
+#
+# The CLI runs with its OWN empty CLAUDE_CONFIG_DIR: the operator's settings, hooks
+# and plugins never reach it, so a verdict depends on --settings alone.
 set -u
 
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -37,7 +40,7 @@ while [ $# -gt 0 ]; do
     --port)     PORT=${2:-}; shift 2;;
     --timeout)  LIMIT=${2:-}; shift 2;;
     --keep)     KEEP=1; shift;;
-    --help|-h)  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --help|-h)  sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) printf 'probe.sh: unknown flag: %s\n' "$1" >&2; exit 2;;
   esac
 done
@@ -54,12 +57,15 @@ command -v "$CLAUDE" >/dev/null 2>&1 || { echo "probe.sh: claude not found (set 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/ccprobe.XXXXXX")
 MARK="$WORK/mark"
 OUTF="$WORK/cli-output.json"
+# Outside the CLI's cwd/--add-dir on purpose: the config tree is not something the
+# command under test should be able to see or write.
+CFG=$(mktemp -d "${TMPDIR:-/tmp}/ccprobe-cfg.XXXXXX")
 CMD=${C//\$MARK/$MARK}
 TIMEDOUT=0
 
 cleanup() {
   [ -n "${SPID:-}" ] && kill "$SPID" 2>/dev/null
-  [ "$KEEP" = 1 ] || rm -rf "$WORK"
+  [ "$KEEP" = 1 ] || rm -rf "$WORK" "$CFG"
 }
 trap cleanup EXIT
 
@@ -74,7 +80,8 @@ done
 cd "$WORK" || exit 2
 # A BLOCKED command in -p mode waits forever for a prompt no TTY will answer,
 # so the run is bounded rather than allowed to hang.
-env ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT" \
+env CLAUDE_CONFIG_DIR="$CFG" \
+    ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT" \
     ANTHROPIC_AUTH_TOKEN=stub \
     ANTHROPIC_MODEL=claude-opus-5 \
     "$CLAUDE" -p 'go' --settings "$S" --permission-mode acceptEdits \
@@ -82,6 +89,9 @@ env ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT" \
 CPID=$!
 WAITED=0
 while kill -0 "$CPID" 2>/dev/null; do
+  # ALLOWED is final once the marker exists; only BLOCKED needs the full watchdog,
+  # because an absence cannot be proven early.
+  if [ -e "$MARK" ]; then kill -9 "$CPID" 2>/dev/null; break; fi
   if [ "$WAITED" -ge "$LIMIT" ]; then kill -9 "$CPID" 2>/dev/null; TIMEDOUT=1; break; fi
   sleep 1; WAITED=$((WAITED+1))
 done
